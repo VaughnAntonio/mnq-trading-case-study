@@ -1,0 +1,13 @@
+question,account_type,account_name,metric,value
+Q5,eval,APEX 50k Eval,max_drawdown_vs_limit,0.4
+Q5,eval,TOPSTEP 50k Combine 1,max_drawdown_vs_limit,0.5
+Q5,funded,APEX 50k PA,max_drawdown_vs_limit,2.8
+Q5,eval,APEX 50k Eval,worst_day_vs_limit,0.2
+Q5,eval,TOPSTEP 50k Combine 1,worst_day_vs_limit,0.5
+Q5,funded,APEX 50k PA,worst_day_vs_limit,2.8
+Q5,eval,APEX 50k Eval,min_cushion_vs_limit,0.6
+Q5,eval,TOPSTEP 50k Combine 1,min_cushion_vs_limit,0.5
+Q5,funded,APEX 50k PA,min_cushion_vs_limit,0.64
+Q7,eval,NA,journal_pnl_vs_1mnq_buyhold,0.784
+Q7,forward_test,NA,journal_pnl_vs_1mnq_buyhold,0.595
+Q7,funded,NA,journal_pnl_vs_1mnq_buyhold,2.764
