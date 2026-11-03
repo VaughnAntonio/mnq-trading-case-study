@@ -11,3 +11,8 @@ renv/staging/
 .Rproj.user
 .httr-oauth
 .quarto
+
+# Clean data with dollar PnL: private until privacy decision
+data/processed/trades_clean.csv
+data/processed/days_clean.csv
+data/processed/risk_units.csv

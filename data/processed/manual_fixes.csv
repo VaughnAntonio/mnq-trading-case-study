@@ -1,0 +1,12 @@
+account_name,page_name,text,field,old_value,new_value,action,reason
+Backtest,18/8/25,Trade 2 -1.5rr -500pnl,planned_rr,-1.5,1.5,fix,"Minus was a typo for the loss; planned RR was 1.5 (confirmed by Vaughn, 2026-11-03)"
+APEX 50k PA,20/10/25,Trade 1 2rr - 350pnl +A Setup,trade_no,1,1,keep,"Two separate trades both labelled Trade 1; keep both (confirmed by Vaughn, 2026-11-03)"
+APEX 50k PA,20/10/25,Trade 1 1:6rr +450rr +A Setup,trade_no,1,1,keep,"Two separate trades both labelled Trade 1; keep both (confirmed by Vaughn, 2026-11-03)"
+Backtest,22/2/25 (Fund trial),,date,,,keep,"February 2025 date is correct, not a typo (confirmed by Vaughn, 2026-11-03)"
+Backtest,23/2/25 (Fund trial),,date,,,keep,"February 2025 date is correct, not a typo (confirmed by Vaughn, 2026-11-03)"
+APEX 50k Eval,29/8/25,Trade taken 1.4rr B+ Setup,,,,drop,"No PnL written; cannot be parsed"
+APEX 50k PA,15/9/25,Traded between the snipe spot (5:50-6:10),,,,drop,"Note, not a trade"
+APEX 50k PA,10/9/25,,page_name,10/9/25,10/10/25,fix,"Month typo: page created in Oct, PA only existed after eval passed 18/9/25 (confirmed by Vaughn, 2026-11-03)"
+APEX 50k PA,13/9/25,,page_name,13/9/25,13/10/25,fix,"Month typo: page created in Oct (confirmed by Vaughn, 2026-11-03)"
+APEX 50k PA,14/9/25,,page_name,14/9/25,14/10/25,fix,"Month typo: page created in Oct (confirmed by Vaughn, 2026-11-03)"
+APEX 50k PA,15/9/25,,page_name,15/9/25,15/10/25,fix,"Month typo: page created in Oct (confirmed by Vaughn, 2026-11-03)"
