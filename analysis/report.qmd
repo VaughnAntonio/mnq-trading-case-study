@@ -347,9 +347,9 @@ During my live window the rule stayed long the whole time, so it matched buy & h
 
 ## What I changed in my trading
 
-<!-- TODO (Vaughn): So this analysis gave me whole different perspective on how I trade, sometimes I basically trade based on my emotions and not purely on strategy. Backtesting showed 100% winrate which shows a better bias rather than an edge. How do I improve? -- Purely focus on strategy and not emotions and rerun the whole setup again for another 30 days
+This analysis gave me a whole different perspective on how I trade. Sometimes I trade on my emotions and not purely on my strategy. The 100% winning backtest shows a bias, not an edge.
 
-*To be written.*
+How do I improve? I will focus purely on the strategy, not on emotions, and run this whole process again on another 30 days of journalled trades.
 
 ## Reproduce
 
