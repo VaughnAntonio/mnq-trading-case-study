@@ -96,7 +96,7 @@ I analysed **`r nrow(days)` trading days** and **`r nrow(trades)` journalled tra
 #| fig-cap: "Cumulative result by account (scaled dollars)."
 #| fig-height: 5
 
-days |>
+p_headline <- days |>
   arrange(date) |>
   group_by(account_name) |>
   mutate(equity = cumsum(pnl_scaled)) |>
@@ -107,6 +107,10 @@ days |>
   scale_y_continuous(labels = label_dollar()) +
   date_axis +
   labs(x = NULL, y = "Cumulative PnL (scaled $)")
+
+# Also save for the README (scaled dollars, safe to publish)
+ggsave(here("docs", "headline.png"), p_headline, width = 9, height = 5, dpi = 150, bg = "white")
+p_headline
 ```
 
 ## Background
