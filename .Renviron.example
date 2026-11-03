@@ -1,2 +1,5 @@
 # Copy to .Renviron (gitignored) and fill in. Never commit the real file.
 NOTION_TOKEN=secret_xxx
+
+# Hidden factor for public scaled dollars (07_make_public_data.R)
+PNL_SCALE=0.xxx
