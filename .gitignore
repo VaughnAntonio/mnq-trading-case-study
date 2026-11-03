@@ -20,3 +20,4 @@ data/processed/risk_units.csv
 # Outputs show dollar values: private until privacy decision
 outputs/tables/*.csv
 outputs/figures/*.png
+data/processed/days_regimes.csv
