@@ -34,3 +34,4 @@ save_fig <- function(plot, name, width = 8, height = 5) {
 save_tbl <- function(tbl, name) {
   write_csv(tbl, here("outputs", "tables", paste0(name, ".csv")))
 }
+
