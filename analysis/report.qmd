@@ -1,0 +1,364 @@
+---
+title: "Do I Have an Edge Trading MNQ?"
+subtitle: "A data case study of my 2025 futures journal"
+author: "Vaughn Antonio"
+date: last-modified
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: true
+    code-summary: "Show code"
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+# The report reads ONLY public files: data/public/ and data/market/.
+# Dollar values are scaled by a hidden factor (see Data section).
+source(here::here("R", "00_setup.R"))
+library(gt)
+set.seed(2025)
+
+read_pub <- function(f) read_csv(here("data", "public", f), show_col_types = FALSE)
+
+days <- read_pub("days_public.csv") |>
+  mutate(account_type = factor(account_type, levels = account_levels))
+trades <- read_pub("trades_public.csv") |>
+  mutate(
+    account_type = factor(account_type, levels = account_levels),
+    grade_family = case_when(
+      str_starts(setup_grade, "A") ~ "A",
+      str_starts(setup_grade, "B") ~ "B",
+      str_starts(setup_grade, "C") ~ "C",
+      str_starts(setup_grade, "E") ~ "E",
+      .default = "Ungraded"
+    )
+  )
+comp   <- read_pub("comparisons_public.csv")
+limits <- read_pub("prop_limits_public.csv")
+mnq    <- read_csv(here("data", "market", "mnq_daily.csv"), show_col_types = FALSE)
+
+# Small formatting helpers for inline numbers
+pct  <- \(x, d = 0) percent(x, accuracy = 10^-d)
+num  <- \(x, d = 2) number(x, accuracy = 10^-d)
+get_comp <- \(acc, m) comp |> filter(account_name == acc, metric == m) |> pull(value)
+get_q7   <- \(type)   comp |> filter(question == "Q7", account_type == type) |> pull(value)
+
+# Shared tables used across sections
+q1_days   <- perf_summary(days, pnl_scaled, day_r, account_type)
+q1_trades <- perf_summary(trades, pnl_scaled, r_multiple, account_type)
+val <- \(tbl, type, col) tbl |> filter(account_type == type) |> pull({{ col }})
+
+# Worst funded day (used in Summary and Q5)
+worst_funded <- days |> filter(account_type == "funded") |> slice_min(day_r, n = 1, with_ties = FALSE)
+
+# Nice table for any perf_summary output
+perf_gt <- function(tbl, ...) {
+  tbl |>
+    mutate(profit_factor = if_else(is.infinite(profit_factor), NA_real_, profit_factor)) |>
+    select(..., n, win_rate, expectancy_r, expectancy_r_ci_low,
+           expectancy_r_ci_high, profit_factor) |>
+    gt() |>
+    fmt_percent(win_rate, decimals = 0) |>
+    fmt_number(c(expectancy_r, expectancy_r_ci_low, expectancy_r_ci_high,
+                 profit_factor), decimals = 2) |>
+    cols_merge(c(expectancy_r_ci_low, expectancy_r_ci_high), pattern = "{1} to {2}") |>
+    cols_label(n = "n", win_rate = "Win rate", expectancy_r = "Expectancy (R)",
+               expectancy_r_ci_low = "95% CI (R)", profit_factor = "Profit factor") |>
+    tab_style(style = cell_text(color = "#718096"),
+              locations = cells_body(rows = n < min_sample)) |>
+    sub_missing(columns = profit_factor, missing_text = "no losses")
+}
+
+# Readable date axis for small facets
+date_axis <- scale_x_date(date_labels = "%d %b", breaks = breaks_pretty(n = 3))
+```
+
+## Summary
+
+I analysed **`r nrow(days)` trading days** and **`r nrow(trades)` journalled trades** of MNQ / Nasdaq-100 futures from my 2025 journal, split into backtest, forward test, prop-firm evaluations and a funded account.
+
+- **No edge is proven yet.** Every stage was profitable, but every group has fewer than `r min_sample` days, and the 95% confidence interval crosses zero for forward test, eval and funded.
+- **Size, not setups, drove the funded result.** My worst funded day was **`r num(get_comp("APEX 50k PA", "worst_day_vs_limit"), 1)`×** the account's drawdown limit. The account survived only because earlier profits had locked the threshold. A fresh account would have failed that day.
+- **The backtest looks too good.** It won `r pct(val(q1_days, "backtest", win_rate))` of days, which points to hindsight bias rather than an edge.
+- **The market did a lot of the work.** During my live window, a strong Nasdaq uptrend, simply holding 1 MNQ contract earned more than my eval account (`r num(get_q7("eval"))`×) and my forward test (`r num(get_q7("forward_test"))`×), each traded at far larger size.
+- **Next step:** journal every trade with a grade and stated risk, and re-test once each stage has 30+ days.
+
+```{r}
+#| label: fig-headline
+#| fig-cap: "Cumulative result by account (scaled dollars)."
+#| fig-height: 5
+
+days |>
+  arrange(date) |>
+  group_by(account_name) |>
+  mutate(equity = cumsum(pnl_scaled)) |>
+  ggplot(aes(date, equity)) +
+  geom_hline(yintercept = 0, colour = "grey60") +
+  geom_step(colour = "#2b6cb0") +
+  facet_wrap(~ account_name, scales = "free") +
+  scale_y_continuous(labels = label_dollar()) +
+  date_axis +
+  labs(x = NULL, y = "Cumulative PnL (scaled $)")
+```
+
+## Background
+
+**MNQ** is the Micro E-mini Nasdaq-100 future: 1 index point = \$2 per contract. I trade it intraday in the New York session with ICT-style setups (fair value gaps, order blocks, liquidity sweeps) and two of my own models, **Forever Model** and **ModelV2**. I grade setups A, B or C before entry.
+
+The journal lives in Notion, with one database per stage:
+
+| Stage | Accounts |
+|---|---|
+| Backtest | Back Testing Data |
+| Forward test | Forward Testing |
+| Eval | APEX 50k Eval, TOPSTEP 50k Combine |
+| Funded | APEX 50k PA (performance account) |
+
+The question: **do I have a measurable edge, and when does it show up?**
+
+## Data
+
+**Extraction.** An R script pulls the journal through the Notion API (`httr2`). Each day is a database row with PnL, strategy, contract size and trade count. Individual trades are written as captions under chart screenshots, e.g. `Trade 2 3rr -250 B Setup`, and parsed with a regular expression.
+
+**Cleaning.** The journal is free text, so it is messy: `1:5rr` means 1.5R, `- 200pnl` has a stray space, `BE` means break-even, and some page titles had the wrong month. Every hand correction is logged in `data/processed/manual_fixes.csv` and applied in code.
+
+**Two levels of data.**
+
+- **Days** (`r nrow(days)`): complete. Used for most questions.
+- **Trades** (`r nrow(trades)`): only the trades I wrote up. Journal coverage is uneven:
+
+```{r}
+#| label: tbl-coverage
+#| tbl-cap: "Trades written up vs trades taken, by account."
+days |>
+  group_by(account_type, account_name) |>
+  summarise(days = n(),
+            trades_taken = sum(trades_taken, na.rm = TRUE),
+            trades_journalled = sum(trades_journalled), .groups = "drop") |>
+  mutate(coverage = if_else(trades_taken > 0, trades_journalled / trades_taken, NA_real_)) |>
+  gt() |>
+  fmt_percent(coverage, decimals = 0) |>
+  sub_missing(missing_text = "not recorded") |>
+  cols_label(account_type = "Stage", account_name = "Account", days = "Days",
+             trades_taken = "Trades taken", trades_journalled = "Trades journalled",
+             coverage = "Coverage")
+```
+
+**Scope.** Nasdaq-100 only (MNQ, NQ, NAS100). Gold and S&P 500 days were removed.
+
+**R multiples.** To compare trades of different size, results are in **R**: profit divided by the amount risked. +2R means I made twice what I risked. Where I know my planned risk, R = PnL ÷ risk, so a loss bigger than planned shows as worse than -1R. Where I do not, 1R is estimated as the median losing trade for that account. The `r_method` column records which.
+
+**Privacy.** All dollar values are multiplied by one hidden factor. Shapes, ratios, win rates and R multiples are unchanged.
+
+## Results: Part A
+
+### Q1. Win rate and expectancy
+
+**Expectancy** is the average result per day or trade. Above zero means profitable on average. The **95% confidence interval (CI)** shows how sure we can be: it comes from resampling my results 2,000 times. If it crosses zero, the edge could be luck. Grey rows have fewer than `r min_sample` observations.
+
+```{r}
+#| label: tbl-q1-days
+#| tbl-cap: "Day level, by stage."
+perf_gt(q1_days, account_type) |> cols_label(account_type = "Stage")
+```
+
+```{r}
+#| label: tbl-q1-trades
+#| tbl-cap: "Journalled trades, by stage."
+perf_gt(q1_trades, account_type) |> cols_label(account_type = "Stage")
+```
+
+Every stage made money in days, but only the backtest has a CI fully above zero, and that is the least trustworthy stage. The journalled eval trades are break-even (`r num(val(q1_trades, "eval", expectancy_r))`R per trade), even though the eval account finished in profit, so the trades I did not write up did better than the ones I did.
+
+### Q2. Do A setups beat B and C?
+
+```{r}
+#| label: fig-q2
+#| fig-cap: "Expectancy by setup grade (journalled trades). Error bars: 95% CI."
+#| fig-height: 4.5
+q2 <- perf_summary(trades, pnl_scaled, r_multiple, account_type, grade_family)
+plot_expectancy(q2, grade_family, NULL)
+```
+
+**Not enough data to conclude.** No grade has more than a handful of trades in any stage, backtests are ungraded, and all funded journal entries are A or A+. This is a journalling gap, not a finding.
+
+### Q3. Which strategy performs best?
+
+```{r}
+#| label: fig-q3
+#| fig-cap: "Expectancy by main strategy of the day. Error bars: 95% CI."
+#| fig-height: 4.5
+q3 <- days |>
+  mutate(strategy_main = replace_na(strategy_main, "Not recorded")) |>
+  perf_summary(pnl_scaled, day_r, account_type, strategy_main)
+plot_expectancy(q3, strategy_main, NULL) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+gamba   <- q3 |> filter(account_type == "funded", strategy_main == "Gamba")
+modelv2 <- q3 |> filter(account_type == "funded", strategy_main == "ModelV2")
+```
+
+Forever Model was used mostly in backtest and forward test, ModelV2 mostly in eval and funded. Because the strategy changed with the stage, strategy and stage cannot be separated with this data.
+
+The clearest signal is not a strategy at all: the `r gamba$n` funded days I tagged **"Gamba"** (gambling) averaged **`r num(gamba$expectancy_r, 1)`R**, against **`r num(modelv2$expectancy_r, 1)`R** on ModelV2 days. Small numbers, but it matches Q5.
+
+### Q4. Does performance drop from backtest to live?
+
+```{r}
+#| label: fig-q4
+#| fig-cap: "Win rate and expectancy by stage (days)."
+#| fig-height: 4
+q1_days |>
+  select(account_type, n, win_rate, expectancy_r) |>
+  pivot_longer(c(win_rate, expectancy_r), names_to = "metric") |>
+  ggplot(aes(account_type, value)) +
+  geom_col(fill = "#2b6cb0") +
+  geom_text(aes(label = paste0("n=", n)), vjust = -0.4, size = 3) +
+  facet_wrap(~ metric, scales = "free_y",
+             labeller = as_labeller(c(win_rate = "Win rate", expectancy_r = "Expectancy (R per day)"))) +
+  labs(x = NULL, y = NULL)
+```
+
+Win rate falls from `r pct(val(q1_days, "backtest", win_rate))` in backtest to `r pct(val(q1_days, "forward_test", win_rate))` in forward test and `r pct(val(q1_days, "eval", win_rate))` in eval: the expected decay once real money and emotions are involved. It recovers to `r pct(val(q1_days, "funded", win_rate))` in the funded account. Funded expectancy in R looks highest, but that is because I traded far above my planned risk (Q5), so it is not a like-for-like comparison.
+
+### Q5. How deep were my drawdowns versus prop-firm limits?
+
+Prop firms close the account if equity falls to a **threshold** that trails the highest equity reached. The threshold stops trailing once there is enough profit (APEX: at +\$100; TOPSTEP: at the starting balance).
+
+```{r}
+#| label: fig-q5
+#| fig-cap: "Equity (blue) vs the stop-out threshold (red dashed), end of day, scaled dollars."
+#| fig-height: 4.5
+days |>
+  inner_join(limits, by = "account_name") |>
+  arrange(date) |>
+  group_by(account_name) |>
+  mutate(equity    = cumsum(pnl_scaled),
+         peak      = pmax(cummax(equity), 0),
+         threshold = pmin(peak - limit_scaled, lock_scaled)) |>
+  ggplot(aes(date)) +
+  geom_step(aes(y = equity), colour = "#2b6cb0") +
+  geom_step(aes(y = threshold), colour = "#c53030", linetype = "dashed") +
+  facet_wrap(~ account_name, scales = "free") +
+  scale_y_continuous(labels = label_dollar()) +
+  date_axis +
+  labs(x = NULL, y = "Scaled $")
+```
+
+```{r}
+#| label: tbl-q5
+#| tbl-cap: "Drawdowns as a multiple of each account's limit."
+comp |>
+  filter(question == "Q5") |>
+  pivot_wider(names_from = metric, values_from = value) |>
+  select(account_name, max_drawdown_vs_limit, worst_day_vs_limit, min_cushion_vs_limit) |>
+  gt() |>
+  fmt_number(-account_name, decimals = 2, pattern = "{x}×") |>
+  cols_label(account_name = "Account", max_drawdown_vs_limit = "Max drawdown",
+             worst_day_vs_limit = "Worst day", min_cushion_vs_limit = "Lowest cushion")
+```
+
+No account breached at end of day. But the funded account's worst day was **`r num(get_comp("APEX 50k PA", "worst_day_vs_limit"), 1)`× its whole drawdown limit**. On that day I took `r worst_funded$trades_taken` trades, tagged "`r worst_funded$strategy`" in the journal. With my planned risk of \$50–150 per trade, the day was worth `r num(worst_funded$day_r, 0)`R. **The biggest risk in my trading is position size and discipline on bad days, not setup selection.**
+
+## Results: Part B
+
+### Q6. Trend days vs choppy days
+
+Each MNQ daily bar is tagged by how much of its range was "body" (open to close):
+
+- **Trend**: body > 60% of range (closed near one end).
+- **Chop**: body < 30% (closed near where it opened).
+- **Normal**: in between.
+
+Since 2025 the market splits roughly a third each way, so the thresholds are balanced.
+
+```{r}
+#| label: fig-q6
+#| fig-cap: "Expectancy by market regime (days). Error bars: 95% CI."
+#| fig-height: 4.5
+q6 <- days |>
+  filter(!is.na(regime)) |>
+  mutate(regime = factor(regime, levels = c("trend", "normal", "chop"))) |>
+  perf_summary(pnl_scaled, day_r, account_type, regime)
+plot_expectancy(q6, regime, NULL)
+```
+
+Groups are 1–11 days, so this is description, not proof. One pattern is worth testing with more data: **trend days were my weakest regime in every live stage**. That is the opposite of what I expected from continuation setups.
+
+Every one of my trading days had MNQ above its 50-day moving average (`r pct(mean(days$context == "bull", na.rm = TRUE))` of tagged days), so I cannot compare bull and bear context.
+
+### Q7. My journal vs a simple trend rule
+
+```{r}
+#| label: q7-calc
+bench <- mnq |>
+  arrange(date) |>
+  mutate(ret = close / dplyr::lag(close) - 1,
+         in_market = dplyr::lag(as.integer(TTR::SMA(close, 20) > TTR::SMA(close, 50))),
+         ma_ret = ret * in_market) |>
+  drop_na(in_market, ret)
+
+stats <- function(r) {
+  g <- cumprod(1 + r)
+  tibble(ann_return = prod(1 + r)^(252 / length(r)) - 1,
+         volatility = sd(r) * sqrt(252),
+         sharpe = ann_return / volatility,
+         max_drawdown = min(g / cummax(g) - 1))
+}
+q7 <- bind_rows(stats(bench$ma_ret) |> mutate(strategy = "MA 20/50 rule", .before = 1),
+                stats(bench$ret)    |> mutate(strategy = "Buy & hold",    .before = 1))
+```
+
+The rule: hold 1 MNQ the next day if the 20-day moving average is above the 50-day, otherwise stay flat. From `r format(min(bench$date), "%B %Y")` to `r format(max(bench$date), "%B %Y")`:
+
+```{r}
+#| label: tbl-q7
+#| tbl-cap: "MA 20/50 rule vs buy & hold, 1 MNQ, full history."
+gt(q7) |>
+  fmt_percent(c(ann_return, volatility, max_drawdown), decimals = 1) |>
+  fmt_number(sharpe, decimals = 2) |>
+  cols_label(strategy = "", ann_return = "Annual return", volatility = "Volatility",
+             sharpe = "Sharpe", max_drawdown = "Worst drawdown")
+```
+
+**Sharpe ratio** = return ÷ volatility: return per unit of risk. The MA rule reduced the worst drawdown but gave up more return, so buy & hold was better per unit of risk.
+
+During my live window the rule stayed long the whole time, so it matched buy & hold. Compared with holding 1 MNQ over the same days, my eval accounts earned `r num(get_q7("eval"))`×, my forward test `r num(get_q7("forward_test"))`× and my funded account `r num(get_q7("funded"))`×, while trading much larger size (often 10+ MNQ-equivalent). **Per unit of size, passive holding did as well or better in this window.** This is context, not a fair race: the benchmark holds overnight with no stop, while I trade intraday under prop-firm limits.
+
+## Limitations
+
+- **Small sample.** `r nrow(days)` days in total; every group is under `r min_sample`. Nothing here is statistically conclusive.
+- **Self-reported journal.** PnL and grades are typed by hand. Trade-level coverage is as low as `r pct(min(days |> filter(trades_taken > 0) |> group_by(account_name) |> summarise(c = sum(trades_journalled) / sum(trades_taken)) |> pull(c)))` for one account, and the trades I wrote up may not be typical.
+- **Planned vs actual RR.** The journal records planned RR, not the RR achieved.
+- **Estimated risk.** For accounts without a stated risk, 1R is the median losing trade. Backtest sizing changed during the period, which distorts its R values.
+- **No fees or commissions.** Results are gross.
+- **Backtests are hypothetical.** A 100% winning-day backtest suggests hindsight bias.
+- **End-of-day data only.** Drawdowns and regimes use daily bars. An intraday dip can breach a prop-firm limit even when the day closes above it.
+- **Market data.** `MNQ=F` from Yahoo is a continuous front-month series that is not adjusted for contract rolls, and its daily bar covers the full overnight session, not just my New York hours.
+- **Strategy and stage overlap.** Forever Model was used early and ModelV2 later, so strategy effects cannot be separated from stage effects.
+
+## What I changed in my trading
+
+<!-- TODO (Vaughn): So this analysis gave me whole different perspective on how I trade, sometimes I basically trade based on my emotions and not purely on strategy. Backtesting showed 100% winrate which shows a better bias rather than an edge. How do I improve? -- Purely focus on strategy and not emotions and rerun the whole setup again for another 30 days
+
+*To be written.*
+
+## Reproduce
+
+```bash
+git clone https://github.com/VaughnAntonio/mnq-trading-case-study.git
+```
+
+1. Open `mnq-trading-case-study.Rproj` in RStudio.
+2. `renv::restore()` installs the exact package versions.
+3. `quarto render analysis/report.qmd` rebuilds this report from the public data in `data/public/` and `data/market/`.
+
+The full pipeline (`R/01` to `R/07`) needs access to my private Notion journal and is included to show the method.

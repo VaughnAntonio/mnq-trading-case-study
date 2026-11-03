@@ -97,8 +97,26 @@ comparisons_public <- bind_rows(
 
 write_csv(comparisons_public, here("data", "public", "comparisons_public.csv"))
 
+# Prop-firm rules in scaled units, so the report can draw equity vs threshold
+# (same rules as 04_metrics.R)
+prop_limits_public <- tribble(
+  ~account_name,            ~limit_usd, ~lock_usd,
+  "APEX 50k Eval",          2500,       100,
+  "APEX 50k PA",            2500,       100,
+  "TOPSTEP 50k Combine 1",  2000,       0,
+  "TOPSTEP 6x50k Combine",  2000,       0
+) |>
+  transmute(account_name,
+            limit_scaled = round(limit_usd * scale, 2),
+            lock_scaled  = round(lock_usd * scale, 2))
+
+write_csv(prop_limits_public, here("data", "public", "prop_limits_public.csv"))
+
 write_csv(days_public,   here("data", "public", "days_public.csv"))
 write_csv(trades_public, here("data", "public", "trades_public.csv"))
 
 message("Public files written: ", nrow(days_public), " days, ",
         nrow(trades_public), " trades. Scale factor not printed on purpose.")
+
+# Keep the hidden factor out of the Environment pane (and screenshots)
+rm(scale)

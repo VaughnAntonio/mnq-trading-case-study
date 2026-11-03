@@ -77,7 +77,7 @@ plot_expectancy <- function(tbl, x, title) {
     geom_hline(yintercept = 0, colour = "grey60") +
     geom_pointrange(aes(ymin = expectancy_r_ci_low, ymax = expectancy_r_ci_high)) +
     geom_text(aes(label = paste0("n=", n)), vjust = -1.2, size = 3, colour = "grey30") +
-    facet_wrap(~ account_type, nrow = 1) +
+    facet_wrap(~ account_type, nrow = 1, scales = "free_x") +   # only show groups that exist
     scale_colour_manual(values = c(`TRUE` = "#2b6cb0", `FALSE` = "#a0aec0"),
                         labels = c(`TRUE` = "n >= 30", `FALSE` = "n < 30 (not conclusive)"),
                         name = NULL) +

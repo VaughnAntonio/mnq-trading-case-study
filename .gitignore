@@ -21,3 +21,6 @@ data/processed/risk_units.csv
 outputs/tables/*.csv
 outputs/figures/*.png
 data/processed/days_regimes.csv
+
+/.quarto/
+**/*.quarto_ipynb
