@@ -1,0 +1,2 @@
+# Copy to .Renviron (gitignored) and fill in. Never commit the real file.
+NOTION_TOKEN=secret_xxx

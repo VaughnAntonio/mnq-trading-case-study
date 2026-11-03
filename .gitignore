@@ -1,0 +1,13 @@
+.Rproj.user/
+.Rhistory
+.RData
+.Renviron
+data/raw/*
+!data/raw/.gitkeep
+renv/library/
+renv/staging/
+*_files/
+.DS_Store
+.Rproj.user
+.httr-oauth
+.quarto
